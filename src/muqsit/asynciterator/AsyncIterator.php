@@ -24,9 +24,17 @@ class AsyncIterator{
 	 * @return AsyncForeachHandler<TKey, TValue>
 	 */
 	public function forEach(Iterator $iterable, int $entries_per_tick = 10, int $sleep_time = 1) : AsyncForeachHandler{
+		if($entries_per_tick < 1){
+			throw new \InvalidArgumentException("entries_per_tick must be greater than zero");
+		}
+		if($sleep_time < 1){
+			throw new \InvalidArgumentException("sleep_time must be greater than zero");
+		}
+
 		$handler = new SimpleAsyncForeachHandler($iterable, $entries_per_tick);
 		$task_handler = $this->scheduler->scheduleDelayedRepeatingTask(new AsyncForeachTask($handler), 1, $sleep_time);
 		$handler->init("Plugin: {$task_handler->getOwnerName()} Event: AsyncIterator");
+		$handler->attach($task_handler);
 		return $handler;
 	}
 }

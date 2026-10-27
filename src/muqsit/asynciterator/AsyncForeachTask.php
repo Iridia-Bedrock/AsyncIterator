@@ -6,6 +6,7 @@ namespace muqsit\asynciterator;
 
 use muqsit\asynciterator\handler\AsyncForeachHandler;
 use pocketmine\scheduler\Task;
+use Throwable;
 
 /**
  * @template TKey
@@ -21,12 +22,16 @@ final class AsyncForeachTask extends Task{
 	){}
 
 	public function onRun() : void{
-		if(!$this->async_foreach_handler->handle()){
-			$this->async_foreach_handler->doCompletion();
-			$task_handler = $this->getHandler();
-			if($task_handler !== null){
-				$task_handler->cancel();
+		try{
+			if(!$this->async_foreach_handler->handle()){
+				$this->async_foreach_handler->doCompletion();
+				$task_handler = $this->getHandler();
+				if($task_handler !== null){
+					$task_handler->cancel();
+				}
 			}
+		}catch(Throwable $exception){
+			$this->async_foreach_handler->fail($exception);
 		}
 	}
 }

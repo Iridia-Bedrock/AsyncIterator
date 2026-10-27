@@ -8,6 +8,8 @@ use Closure;
 use Iterator;
 use muqsit\asynciterator\util\EmptyTimedClosure;
 use muqsit\asynciterator\util\KeyValueTimedClosure;
+use pocketmine\scheduler\TaskHandler;
+use Throwable;
 
 /**
  * @template TKey
@@ -26,6 +28,12 @@ final class SimpleAsyncForeachHandler implements AsyncForeachHandler{
 	private array $callbacks = [];
 
 	private int $finalization_type = self::COMPLETION_CALLBACKS;
+
+	private ?TaskHandler $task_handler = null;
+
+	private bool $finalized = false;
+
+	private ?Closure $error_callback = null;
 
 	/** @var array<int, array<EmptyTimedClosure>>  */
 	private array $finalization_callbacks = [
@@ -49,14 +57,48 @@ final class SimpleAsyncForeachHandler implements AsyncForeachHandler{
 		$this->timings_parent_name = $timings_parent_name;
 	}
 
+	public function attach(TaskHandler $task_handler) : void{
+		if($this->task_handler !== null){
+			throw new \LogicException('An async foreach handler is already attached to a task');
+		}
+
+		$this->task_handler = $task_handler;
+	}
+
 	public function interrupt() : void{
+		if($this->finalized){
+			return;
+		}
+
 		$this->cancelNext();
 		$this->finalization_type = self::INTERRUPTION_CALLBACKS;
+		$this->task_handler?->cancel();
 	}
 
 	public function cancel() : void{
+		if($this->finalized){
+			return;
+		}
+
 		$this->cancelNext();
 		$this->finalization_type = self::EMPTY_CALLBACKS;
+		$this->task_handler?->cancel();
+	}
+
+	public function fail(Throwable $exception) : void{
+		if($this->finalized){
+			return;
+		}
+
+		$this->finalized = true;
+		$this->task_handler?->cancel();
+		if($this->error_callback !== null){
+			($this->error_callback)($exception);
+
+			return;
+		}
+
+		throw $exception;
 	}
 
 	private function cancelNext() : void{
@@ -65,6 +107,10 @@ final class SimpleAsyncForeachHandler implements AsyncForeachHandler{
 	}
 
 	public function handle() : bool{
+		if($this->finalized){
+			return false;
+		}
+
 		$per_run = $this->entries_per_tick;
 		while($this->iterable->valid()){
 			/** @var TKey $key */
@@ -89,9 +135,14 @@ final class SimpleAsyncForeachHandler implements AsyncForeachHandler{
 	}
 
 	public function doCompletion() : void{
+		if($this->finalized){
+			return;
+		}
+
 		foreach($this->finalization_callbacks[$this->finalization_type] as $callback){
 			$callback->call();
 		}
+		$this->finalized = true;
 	}
 
 	public function as(Closure $callback) : AsyncForeachHandler{
@@ -112,5 +163,11 @@ final class SimpleAsyncForeachHandler implements AsyncForeachHandler{
 	public function onCompletionOrInterruption(Closure $callback) : AsyncForeachHandler{
 		return $this->onCompletion($callback)
 			->onInterruption($callback);
+	}
+
+	public function onError(Closure $callback) : AsyncForeachHandler{
+		$this->error_callback = $callback;
+
+		return $this;
 	}
 }

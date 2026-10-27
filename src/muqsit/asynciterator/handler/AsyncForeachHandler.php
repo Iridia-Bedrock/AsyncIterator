@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace muqsit\asynciterator\handler;
 
 use Closure;
+use pocketmine\scheduler\TaskHandler;
+use Throwable;
 
 /**
  * @template TKey
@@ -29,6 +31,11 @@ interface AsyncForeachHandler{
 	public function interrupt() : void;
 
 	/**
+	 * @param TaskHandler $task_handler
+	 */
+	public function attach(TaskHandler $task_handler) : void;
+
+	/**
 	 * Stops the foreach task.
 	 *
 	 * WARNING: Cancelling a foreach task will trigger NEITHER
@@ -36,6 +43,17 @@ interface AsyncForeachHandler{
 	 * {@see AsyncForeachHandler::onCompletion()} callbacks.
 	 */
 	public function cancel() : void;
+
+	/**
+	 * @param Throwable $exception
+	 */
+	public function fail(Throwable $exception) : void;
+
+	/**
+	 * @param Closure(Throwable): void $callback
+	 * @return AsyncForeachHandler<TKey, TValue>
+	 */
+	public function onError(Closure $callback) : self;
 
 	/**
 	 * Called after the foreach task is completed successfully.
